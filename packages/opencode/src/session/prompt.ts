@@ -1381,6 +1381,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             continue
           }
 
+          // Tier 2: Proactive background compaction — trigger at configurable threshold
+          // before we hit overflow. Runs in a detached fiber so the user is never blocked.
+          if (lastFinished && lastFinished.summary !== true) {
+            const totalTokens =
+              lastFinished.tokens.total ??
+              lastFinished.tokens.input + lastFinished.tokens.output + lastFinished.tokens.cache.read + lastFinished.tokens.cache.write
+            const contextWindow = model.limit.context ?? model.limit.input ?? 0
+            if (contextWindow > 0) {
+              yield* compaction.background({
+                sessionID,
+                agent: lastUser.agent,
+                model: lastUser.model,
+                currentTokens: totalTokens,
+                contextWindow,
+              }).pipe(Effect.ignore)
+            }
+          }
+
           if (
             lastFinished &&
             lastFinished.summary !== true &&
