@@ -225,7 +225,7 @@ export const Info = Schema.Struct({
       mode: Schema.optional(Schema.Literal("sync", "background")).annotate({
         description: "Compaction mode. 'sync' blocks the session while summarizing (default). 'background' runs summarization in a detached fiber so the user is never blocked.",
       }),
-      threshold: Schema.optional(Schema.Number.pipe(Schema.greaterThanOrEqualTo(0), Schema.lessThanOrEqualTo(1))).annotate({
+      threshold: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(1))).annotate({
         description: "Context usage ratio (0-1) that triggers proactive background compaction. Default: 0.70 (70% of window). Only effective when mode is 'background'.",
       }),
       cooldown: Schema.optional(Schema.String).annotate({
