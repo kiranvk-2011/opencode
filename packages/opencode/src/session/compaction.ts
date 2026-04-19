@@ -422,7 +422,7 @@ When constructing the summary, try to stick to this template:
       currentTokens: number
       contextWindow: number
     }) {
-      const cfg = yield* Config.get()
+      const cfg = yield* Config.Service.use((svc) => svc.get())
       if (cfg.compaction?.mode !== "background") return false
       if (cfg.compaction?.auto === false) return false
 
