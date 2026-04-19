@@ -214,7 +214,7 @@ const InfoSchema = Schema.Struct({
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
-      mode: Schema.optional(Schema.Literal("sync", "background")).annotate({
+      mode: Schema.optional(Schema.Literals(["sync", "background"])).annotate({
         description: "Compaction mode. 'sync' blocks the session while summarizing (default). 'background' runs summarization in a detached fiber so the user is never blocked.",
       }),
       threshold: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(1))).annotate({
