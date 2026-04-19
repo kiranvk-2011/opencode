@@ -1370,15 +1370,28 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           if (task?.type === "compaction") {
-            const result = yield* compaction.process({
-              messages: msgs,
-              parentID: lastUser.id,
-              sessionID,
-              auto: task.auto,
-              overflow: task.overflow,
-            })
-            if (result === "stop") break
-            continue
+            const cfg = yield* Config.Service.use((svc) => svc.get())
+            if (cfg.compaction?.mode === "background") {
+              // Run compaction in a detached fiber so the prompt loop continues immediately.
+              // The user's next prompt will be processed in parallel while summarization happens.
+              yield* compaction.process({
+                messages: msgs,
+                parentID: lastUser.id,
+                sessionID,
+                auto: task.auto,
+                overflow: task.overflow,
+              }).pipe(Effect.forkDaemon, Effect.ignore)
+            } else {
+              const result = yield* compaction.process({
+                messages: msgs,
+                parentID: lastUser.id,
+                sessionID,
+                auto: task.auto,
+                overflow: task.overflow,
+              })
+              if (result === "stop") break
+              continue
+            }
           }
 
           if (
