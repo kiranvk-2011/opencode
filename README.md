@@ -112,6 +112,52 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### Compaction Configuration
+
+OpenCode supports configurable context compaction to manage long conversations. The compaction system has two modes:
+
+| Mode | Behavior |
+|------|----------|
+| `sync` | Default. Blocks the session while summarizing context when it fills. User sees compaction progress. |
+| `background` | Runs summarization in a detached background process. User never blocked — compaction happens silently while you continue working. |
+
+#### Configuration Options
+
+Add these to your `opencode.json`:
+
+```json
+{
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "mode": "background",
+    "threshold": 0.70,
+    "cooldown": "5m",
+    "reserved": 8192
+  }
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `auto` | boolean | `true` | Enable automatic compaction when context fills |
+| `prune` | boolean | `true` | Enable aggressive pruning of old tool outputs |
+| `mode` | `"sync"` \| `"background"` | `"sync"` | Compaction execution mode |
+| `threshold` | number (0-1) | `0.70` | Context usage ratio that triggers proactive background compaction. Only effective when `mode` is `"background"` |
+| `cooldown` | string | `"5m"` | Minimum time between background compaction runs (duration string like `"5m"`, `"1h"`). Prevents thrashing |
+| `reserved` | number | `8192` | Token buffer to leave for compaction overhead |
+
+#### Background Compaction Details
+
+When `mode: "background"` is set:
+
+- **Proactive triggering**: Compaction starts when context reaches `threshold` (default 70%), not when it's completely full
+- **Non-blocking**: Summarization runs in a detached fiber using `Effect.forkDaemon` — you can continue sending messages
+- **Cooldown protection**: Won't compact the same session more than once per `cooldown` period
+- **Atomic injection**: Summarized content is spliced into session history when ready, with no UI interruption
+
+This is inspired by Claude Code's multi-tier compaction architecture, providing a seamless experience for long-running sessions.
+
 ### Documentation
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
