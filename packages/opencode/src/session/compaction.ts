@@ -619,7 +619,7 @@ export const layer: Layer.Layer<
       currentTokens: number
       contextWindow: number
     }) {
-      const cfg = yield* Config.get()
+      const cfg = yield* Config.Service.use((svc) => svc.get())
       if (cfg.compaction?.mode !== "background") return false
       if (cfg.compaction?.auto === false) return false
 
