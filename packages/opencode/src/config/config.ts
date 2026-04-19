@@ -214,6 +214,15 @@ const InfoSchema = Schema.Struct({
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
+      mode: Schema.optional(Schema.Literal("sync", "background")).annotate({
+        description: "Compaction mode. 'sync' blocks the session while summarizing (default). 'background' runs summarization in a detached fiber so the user is never blocked.",
+      }),
+      threshold: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(1))).annotate({
+        description: "Context usage ratio (0-1) that triggers proactive background compaction. Default: 0.70 (70% of window). Only effective when mode is 'background'.",
+      }),
+      cooldown: Schema.optional(Schema.String).annotate({
+        description: "Minimum time between background compaction runs for the same session (duration string, e.g. '5m'). Prevents thrashing. Default: '5m'.",
+      }),
     }),
   ),
   experimental: Schema.optional(
