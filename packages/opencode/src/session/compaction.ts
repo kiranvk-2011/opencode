@@ -481,6 +481,65 @@ export const layer: Layer.Layer<
       })
     })
 
+    // Per-session cooldown tracking for background compaction
+    const cooldowns = new Map<string, number>()
+    const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
+
+    function parseCooldownMs(raw: string | undefined): number {
+      if (!raw) return DEFAULT_COOLDOWN_MS
+      const match = raw.match(/^(\d+)(ms|s|m|h)?$/)
+      if (!match) return DEFAULT_COOLDOWN_MS
+      const value = Number(match[1])
+      const unit = match[2] || "ms"
+      switch (unit) {
+        case "s": return value * 1000
+        case "m": return value * 60 * 1000
+        case "h": return value * 60 * 60 * 1000
+        default: return value
+      }
+    }
+
+    const background = Effect.fn("SessionCompaction.background")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      model: { providerID: ProviderID; modelID: ModelID }
+      currentTokens: number
+      contextWindow: number
+    }) {
+      const cfg = yield* Config.Service.use((svc) => svc.get())
+      if (cfg.compaction?.mode !== "background") return false
+      if (cfg.compaction?.auto === false) return false
+
+      const threshold = cfg.compaction?.threshold ?? 0.70
+      const ratio = input.currentTokens / input.contextWindow
+      if (ratio < threshold) return false
+
+      const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
+      const lastRun = cooldowns.get(input.sessionID) ?? 0
+      if (Date.now() - lastRun < cooldownMs) return false
+
+      cooldowns.set(input.sessionID, Date.now())
+
+      log.info("background compaction triggered", {
+        sessionID: input.sessionID,
+        ratio: Math.round(ratio * 100) + "%",
+        threshold: Math.round(threshold * 100) + "%",
+        tokens: input.currentTokens,
+        contextWindow: input.contextWindow,
+      })
+
+      yield* Effect.gen(function* () {
+        yield* create({
+          sessionID: input.sessionID,
+          agent: input.agent,
+          model: input.model,
+          auto: true,
+        })
+      }).pipe(Effect.forkDaemon)
+
+      return true
+    })
+
     return Service.of({
       isOverflow,
       prune,
