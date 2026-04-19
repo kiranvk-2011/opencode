@@ -675,6 +675,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           userMessage.parts.push({
             type: "text",
             text: "What did we do so far?",
+            synthetic: true,
           })
         }
         if (part.type === "subtask") {
