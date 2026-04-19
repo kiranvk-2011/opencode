@@ -423,16 +423,41 @@ When constructing the summary, try to stick to this template:
       contextWindow: number
     }) {
       const cfg = yield* Config.Service.use((svc) => svc.get())
-      if (cfg.compaction?.mode !== "background") return false
-      if (cfg.compaction?.auto === false) return false
-
+      const mode = cfg.compaction?.mode
+      const auto = cfg.compaction?.auto
       const threshold = cfg.compaction?.threshold ?? 0.70
       const ratio = input.currentTokens / input.contextWindow
-      if (ratio < threshold) return false
+
+      log.debug("background compaction check", {
+        sessionID: input.sessionID,
+        mode,
+        auto,
+        threshold,
+        ratio: Math.round(ratio * 100) + "%",
+        currentTokens: input.currentTokens,
+        contextWindow: input.contextWindow,
+        compactionConfig: JSON.stringify(cfg.compaction),
+      })
+
+      if (mode !== "background") {
+        log.debug("background compaction skipped: mode mismatch", { mode })
+        return false
+      }
+      if (auto === false) {
+        log.debug("background compaction skipped: auto=false")
+        return false
+      }
+      if (ratio < threshold) {
+        log.debug("background compaction skipped: below threshold", { ratio, threshold })
+        return false
+      }
 
       const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
       const lastRun = cooldowns.get(input.sessionID) ?? 0
-      if (Date.now() - lastRun < cooldownMs) return false
+      if (Date.now() - lastRun < cooldownMs) {
+        log.debug("background compaction skipped: cooldown active")
+        return false
+      }
 
       cooldowns.set(input.sessionID, Date.now())
 
