@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/copilot-business-endpoint-routing
+      - fix/background-compaction
   workflow_dispatch:
 
 jobs:
