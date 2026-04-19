@@ -428,7 +428,7 @@ When constructing the summary, try to stick to this template:
       const threshold = cfg.compaction?.threshold ?? 0.70
       const ratio = input.currentTokens / input.contextWindow
 
-      log.debug("background compaction check", {
+      log.info("background compaction check", {
         sessionID: input.sessionID,
         mode,
         auto,
@@ -440,22 +440,22 @@ When constructing the summary, try to stick to this template:
       })
 
       if (mode !== "background") {
-        log.debug("background compaction skipped: mode mismatch", { mode })
+        log.info("background compaction skipped: mode mismatch", { mode })
         return false
       }
       if (auto === false) {
-        log.debug("background compaction skipped: auto=false")
+        log.info("background compaction skipped: auto=false")
         return false
       }
       if (ratio < threshold) {
-        log.debug("background compaction skipped: below threshold", { ratio, threshold })
+        log.info("background compaction skipped: below threshold", { ratio, threshold })
         return false
       }
 
       const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
       const lastRun = cooldowns.get(input.sessionID) ?? 0
       if (Date.now() - lastRun < cooldownMs) {
-        log.debug("background compaction skipped: cooldown active")
+        log.info("background compaction skipped: cooldown active")
         return false
       }
 
