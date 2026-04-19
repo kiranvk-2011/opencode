@@ -1246,8 +1246,6 @@ function UserMessage(props: {
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
-  const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
-
   return (
     <>
       <Show when={text()}>
@@ -1310,15 +1308,6 @@ function UserMessage(props: {
             </Show>
           </box>
         </box>
-      </Show>
-      <Show when={compaction()}>
-        <box
-          marginTop={1}
-          border={["top"]}
-          title=" Compaction "
-          titleAlignment="center"
-          borderColor={theme.borderActive}
-        />
       </Show>
     </>
   )
