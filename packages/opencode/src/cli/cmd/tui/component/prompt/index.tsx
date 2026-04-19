@@ -1264,6 +1264,9 @@ export function Prompt(props: PromptProps) {
                   </Show>
                 </box>
                 <box flexDirection="row" gap={1} flexShrink={0}>
+                  <Show when={status().type === "compacting"}>
+                    <text fg={theme.textMuted}>compacting…</text>
+                  </Show>
                   {(() => {
                     const retry = createMemo(() => {
                       const s = status()
