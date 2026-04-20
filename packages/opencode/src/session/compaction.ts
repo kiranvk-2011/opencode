@@ -553,14 +553,12 @@ export const layer: Layer.Layer<
         contextWindow: input.contextWindow,
       })
 
-      yield* Effect.gen(function* () {
-        yield* create({
-          sessionID: input.sessionID,
-          agent: input.agent,
-          model: input.model,
-          auto: true,
-        })
-      }).pipe(Effect.forkDaemon)
+      yield* create({
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        auto: true,
+      })
 
       return true
     })
