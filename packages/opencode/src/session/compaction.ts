@@ -5,19 +5,20 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { Provider } from "../provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
-import { Token } from "../util"
-import { Log } from "../util"
+import { Token, Log } from "../util"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config"
 import { NotFoundError } from "@/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, FileSystem } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
+import * as path from "path"
+import * as os from "os"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -489,7 +490,27 @@ export const layer: Layer.Layer<
     })
 
     // Per-session cooldown tracking for background compaction
-    const cooldowns = new Map<string, number>()
+    // Persisted to disk so cooldowns survive runtime restarts and session boundaries
+    const COOLDOWN_FILE = path.join(os.homedir(), ".local", "state", "opencode", "compaction-cooldowns.json")
+
+    function loadCooldowns(): Record<string, number> {
+      try {
+        const raw = require("fs").readFileSync(COOLDOWN_FILE, "utf-8")
+        return JSON.parse(raw)
+      } catch {
+        return {}
+      }
+    }
+
+    function saveCooldowns(data: Record<string, number>) {
+      try {
+        require("fs").mkdirSync(path.dirname(COOLDOWN_FILE), { recursive: true })
+        require("fs").writeFileSync(COOLDOWN_FILE, JSON.stringify(data), "utf-8")
+      } catch {
+        // non-critical — cooldown just won't persist this time
+      }
+    }
+
     const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
 
     function parseCooldownMs(raw: string | undefined): number {
@@ -544,13 +565,18 @@ export const layer: Layer.Layer<
       }
 
       const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
-      const lastRun = cooldowns.get(input.sessionID) ?? 0
+      const cooldowns = loadCooldowns()
+      const lastRun = cooldowns[input.sessionID] ?? 0
       if (Date.now() - lastRun < cooldownMs) {
-        log.info("background compaction skipped: cooldown active")
+        log.info("background compaction skipped: cooldown active", {
+          elapsed: Date.now() - lastRun,
+          cooldownMs,
+        })
         return false
       }
 
-      cooldowns.set(input.sessionID, Date.now())
+      cooldowns[input.sessionID] = Date.now()
+      saveCooldowns(cooldowns)
 
       log.info("background compaction triggered", {
         sessionID: input.sessionID,
