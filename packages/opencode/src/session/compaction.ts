@@ -60,7 +60,7 @@ export interface Interface {
     model: { providerID: ProviderID; modelID: ModelID }
     currentTokens: number
     contextWindow: number
-  }) => Effect.Effect<boolean>
+  }) => Effect.Effect<boolean, never, unknown>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
@@ -476,7 +476,7 @@ When constructing the summary, try to stick to this template:
           model: input.model,
           auto: true,
         })
-      }).pipe(Effect.forkDaemon)
+      }).pipe(Effect.ignore)
 
       return true
     })
