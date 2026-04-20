@@ -1380,7 +1380,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 sessionID,
                 auto: task.auto,
                 overflow: task.overflow,
-              }).pipe(Effect.forkDaemon, Effect.ignore)
+              }).pipe(Effect.ignore, Effect.forkIn(scope))
             } else {
               const result = yield* compaction.process({
                 messages: msgs,
@@ -1408,7 +1408,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 model: lastUser.model,
                 currentTokens: totalTokens,
                 contextWindow,
-              }).pipe(Effect.ignore)
+              }).pipe(Effect.ignore, Effect.forkIn(scope))
             }
           }
 

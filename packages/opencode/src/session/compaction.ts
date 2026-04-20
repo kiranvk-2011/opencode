@@ -52,8 +52,8 @@ export interface Interface {
     auto: boolean
     overflow?: boolean
   }) => Effect.Effect<void>
-  /** Background compaction: checks threshold, cooldown, and forks compaction
-   * as a daemon if conditions are met. Returns true if triggered. */
+  /** Background compaction: checks threshold and cooldown, enqueues a compaction
+   * task if conditions are met. The caller should fork this into a scope. */
   readonly background: (input: {
     sessionID: SessionID
     agent: string
@@ -469,14 +469,12 @@ When constructing the summary, try to stick to this template:
         contextWindow: input.contextWindow,
       })
 
-      yield* Effect.gen(function* () {
-        yield* create({
-          sessionID: input.sessionID,
-          agent: input.agent,
-          model: input.model,
-          auto: true,
-        })
-      }).pipe(Effect.forkDaemon)
+      yield* create({
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        auto: true,
+      })
 
       return true
     })
