@@ -1,5 +1,6 @@
 import type { NamedError } from "@opencode-ai/shared/util/error"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
+import * as Pull from "effect/Pull"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
 
@@ -111,7 +112,7 @@ export function policy(opts: {
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
       const message = retryable(error)
-      if (!message) return Cause.done(meta.attempt)
+      if (!message) return Pull.done(meta.attempt)
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
