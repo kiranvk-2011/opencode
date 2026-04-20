@@ -490,8 +490,10 @@ export const layer: Layer.Layer<
     })
 
     // Per-session cooldown tracking for background compaction
-    // Persisted to disk so cooldowns survive runtime restarts and session boundaries
+    // Two-layer defense: in-memory Map for race protection within same runtime,
+    // disk file for persistence across runtime restarts
     const COOLDOWN_FILE = path.join(os.homedir(), ".local", "state", "opencode", "compaction-cooldowns.json")
+    const cooldownMap = new Map<string, number>()
 
     function loadCooldowns(): Record<string, number> {
       try {
@@ -509,6 +511,12 @@ export const layer: Layer.Layer<
       } catch {
         // non-critical — cooldown just won't persist this time
       }
+    }
+
+    // Initialize in-memory map from disk at startup
+    const diskCooldowns = loadCooldowns()
+    for (const [key, value] of Object.entries(diskCooldowns)) {
+      cooldownMap.set(key, value)
     }
 
     const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
@@ -565,8 +573,7 @@ export const layer: Layer.Layer<
       }
 
       const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
-      const cooldowns = loadCooldowns()
-      const lastRun = cooldowns[input.sessionID] ?? 0
+      const lastRun = cooldownMap.get(input.sessionID) ?? 0
       if (Date.now() - lastRun < cooldownMs) {
         log.info("background compaction skipped: cooldown active", {
           elapsed: Date.now() - lastRun,
@@ -575,8 +582,12 @@ export const layer: Layer.Layer<
         return false
       }
 
-      cooldowns[input.sessionID] = Date.now()
-      saveCooldowns(cooldowns)
+      // Atomic check-and-set: write to Map first (prevents race within same runtime),
+      // then persist to disk (survives restarts)
+      cooldownMap.set(input.sessionID, Date.now())
+      const diskData = loadCooldowns()
+      diskData[input.sessionID] = Date.now()
+      saveCooldowns(diskData)
 
       log.info("background compaction triggered", {
         sessionID: input.sessionID,
