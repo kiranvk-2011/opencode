@@ -209,7 +209,7 @@ export interface Interface {
     model: { providerID: ProviderID; modelID: ModelID }
     currentTokens: number
     contextWindow: number
-  }) => Effect.Effect<boolean>
+  }) => Effect.Effect<boolean, never, unknown>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
@@ -673,7 +673,7 @@ export const layer: Layer.Layer<
           model: input.model,
           auto: true,
         })
-      }).pipe(Effect.forkDaemon)
+      }).pipe(Effect.ignore)
 
       return true
     })

@@ -1159,8 +1159,9 @@ export function Session() {
                         pending={pending()}
                       />
                     </Match>
-                    <Match when={message.role === "assistant" && (message as AssistantMessage).mode === "compaction"}>
+                    <Match when={message.role === "assistant" && (message as AssistantMessage).mode === "compaction"} keyed={false}>
                       {/* Compaction messages are silent — no UI rendered */}
+                      <></>
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
