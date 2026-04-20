@@ -112,7 +112,7 @@ async function exchangeCopilotToken(oauthToken: string, enterpriseDomain?: strin
   }
 
   // Use VS Code identity headers for ghu_ tokens, OpenCode identity for gho_
-  const userAgent = isGhuToken(oauthToken) ? VSCODE_IDENTITY_HEADERS["User-Agent"] : `opencode/${Installation.VERSION}`
+  const userAgent = isGhuToken(oauthToken) ? VSCODE_IDENTITY_HEADERS["User-Agent"] : `opencode/${InstallationVersion}`
   const exchangeHeaders: Record<string, string> = {
     Authorization: `token ${oauthToken}`,
     Accept: "application/json",
@@ -240,7 +240,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           Authorization: `Bearer ${bearerToken}`,
           "User-Agent": isGhuToken(auth.refresh)
             ? VSCODE_IDENTITY_HEADERS["User-Agent"]
-            : `opencode/${Installation.VERSION}`,
+            : `opencode/${InstallationVersion}`,
         }
         if (isGhuToken(auth.refresh)) {
           modelHeaders["Editor-Version"] = VSCODE_IDENTITY_HEADERS["Editor-Version"]
@@ -335,7 +335,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               ...(init?.headers as Record<string, string>),
               "User-Agent": useVscodeIdentity
                 ? VSCODE_IDENTITY_HEADERS["User-Agent"]
-                : `opencode/${Installation.VERSION}`,
+                : `opencode/${InstallationVersion}`,
               Authorization: `Bearer ${bearerToken}`,
               "Openai-Intent": "conversation-edits",
             }
