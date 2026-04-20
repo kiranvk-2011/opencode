@@ -5,6 +5,7 @@ on:
     branches:
       - fix/copilot-business-endpoint-routing
       - fix/background-compaction
+      - fix/forkDaemon-crash
   workflow_dispatch:
 
 jobs:
