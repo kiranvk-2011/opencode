@@ -5,19 +5,32 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { Provider } from "../provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
-import { Token } from "../util"
-import { Log } from "../util"
+import { Token, Log } from "../util"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config"
 import { NotFoundError } from "@/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, Context, Duration } from "effect"
+import { Effect, Layer, Context, Duration, Scope } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow } from "./overflow"
 
 const log = Log.create({ service: "session.compaction" })
+
+// OOM Safeguard thresholds
+export const HARD_CAP_RATIO = 0.95       // At 95%, reject new messages
+export const EMERGENCY_PRUNE_RATIO = 1.0 // At 100%, hard-delete oldest messages
+export const SYNC_FALLBACK_THRESHOLD = 2 // After 2 background failures, go sync
+export const LOG_RATE_LIMIT_MS = 1000    // Max 1 compaction check log per second
+
+// Per-session failure tracking for sync fallback
+const compactionFailures = new Map<string, number>()
+// Log rate limiting: track last log time per session
+const lastLogTime = new Map<string, number>()
+
+/** Hard prune: delete oldest N messages without LLM (emergency only) */
+export const EMERGENCY_PRUNE_COUNT = Math.floor(0.5 * 20) // ~50% of recent 20 turns
 
 export const Event = {
   Compacted: BusEvent.define(
@@ -61,6 +74,18 @@ export interface Interface {
     currentTokens: number
     contextWindow: number
   }) => Effect.Effect<boolean>
+  /** Sync fallback: runs compaction synchronously if background failed N times */
+  readonly syncFallback: (input: {
+    sessionID: SessionID
+    agent: string
+    model: { providerID: ProviderID; modelID: ModelID }
+    currentTokens: number
+    contextWindow: number
+  }) => Effect.Effect<boolean>
+  /** Record a compaction failure (for sync fallback tracking) */
+  readonly recordCompactionFailure: (sessionID: SessionID) => Effect.Effect<void>
+  /** Emergency prune: hard-delete oldest messages when context >100% */
+  readonly emergencyPrune: (input: { sessionID: SessionID }) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
@@ -415,6 +440,14 @@ When constructing the summary, try to stick to this template:
       }
     }
 
+    const rateLimitedLog = (sessionId: string, msg: string, data?: Record<string, unknown>) => {
+      const now = Date.now()
+      const last = lastLogTime.get(sessionId) ?? 0
+      if (now - last < LOG_RATE_LIMIT_MS) return // Skip if within rate limit
+      lastLogTime.set(sessionId, now)
+      log.info(msg, data)
+    }
+
     const background = Effect.fn("SessionCompaction.background")(function* (input: {
       sessionID: SessionID
       agent: string
@@ -428,41 +461,58 @@ When constructing the summary, try to stick to this template:
       const threshold = cfg.compaction?.threshold ?? 0.70
       const ratio = input.currentTokens / input.contextWindow
 
-      log.info("background compaction check", {
-        sessionID: input.sessionID,
+      // EMERGENCY PRUNE: At 100%+, hard-delete oldest messages without LLM
+      if (ratio >= EMERGENCY_PRUNE_RATIO) {
+        rateLimitedLog(input.sessionID, "EMERGENCY: context >100%, hard pruning oldest messages", {
+          ratio: Math.round(ratio * 100) + "%",
+          tokens: input.currentTokens,
+          contextWindow: input.contextWindow,
+        })
+        yield* emergencyPrune({ sessionID: input.sessionID })
+        return true
+      }
+
+      // HARD CAP: At 95%, reject new messages (caller should check this)
+      // We log a warning but don't block — the prompt.ts layer handles rejection
+      if (ratio >= HARD_CAP_RATIO) {
+        rateLimitedLog(input.sessionID, "WARNING: context at hard cap threshold (95%)", {
+          ratio: Math.round(ratio * 100) + "%",
+          tokens: input.currentTokens,
+        })
+      }
+
+      rateLimitedLog(input.sessionID, "background compaction check", {
         mode,
         auto,
         threshold,
         ratio: Math.round(ratio * 100) + "%",
         currentTokens: input.currentTokens,
         contextWindow: input.contextWindow,
-        compactionConfig: JSON.stringify(cfg.compaction),
       })
 
       if (mode !== "background") {
-        log.info("background compaction skipped: mode mismatch", { mode })
+        rateLimitedLog(input.sessionID, "background compaction skipped: mode mismatch", { mode })
         return false
       }
       if (auto === false) {
-        log.info("background compaction skipped: auto=false")
+        rateLimitedLog(input.sessionID, "background compaction skipped: auto=false")
         return false
       }
       if (ratio < threshold) {
-        log.info("background compaction skipped: below threshold", { ratio, threshold })
+        rateLimitedLog(input.sessionID, "background compaction skipped: below threshold", { ratio, threshold })
         return false
       }
 
       const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
       const lastRun = cooldowns.get(input.sessionID) ?? 0
       if (Date.now() - lastRun < cooldownMs) {
-        log.info("background compaction skipped: cooldown active")
+        rateLimitedLog(input.sessionID, "background compaction skipped: cooldown active")
         return false
       }
 
       cooldowns.set(input.sessionID, Date.now())
 
-      log.info("background compaction triggered", {
-        sessionID: input.sessionID,
+      rateLimitedLog(input.sessionID, "background compaction triggered", {
         ratio: Math.round(ratio * 100) + "%",
         threshold: Math.round(threshold * 100) + "%",
         tokens: input.currentTokens,
@@ -476,9 +526,75 @@ When constructing the summary, try to stick to this template:
           model: input.model,
           auto: true,
         })
-      }).pipe(Effect.forkDaemon)
+      }).pipe(Effect.forkIn(yield* Scope.Scope))
 
       return true
+    })
+
+    // Sync fallback: if background compaction fails N times, run it synchronously
+    const syncFallback = Effect.fn("SessionCompaction.syncFallback")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      model: { providerID: ProviderID; modelID: ModelID }
+      currentTokens: number
+      contextWindow: number
+    }) {
+      const failures = compactionFailures.get(input.sessionID) ?? 0
+      if (failures < SYNC_FALLBACK_THRESHOLD) return false
+
+      rateLimitedLog(input.sessionID, "SYNC FALLBACK: background failed " + failures + "x, running synchronously", {
+        tokens: input.currentTokens,
+        contextWindow: input.contextWindow,
+      })
+
+      yield* create({
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        auto: true,
+      })
+
+      compactionFailures.set(input.sessionID, 0) // Reset on success
+      return true
+    })
+
+    // Increment failure counter when compaction doesn't reduce tokens
+    const recordCompactionFailure = Effect.fn("SessionCompaction.recordFailure")(function* (sessionID: SessionID) {
+      const failures = compactionFailures.get(sessionID) ?? 0
+      compactionFailures.set(sessionID, failures + 1)
+      rateLimitedLog(sessionID, "Compaction failure recorded", { failures: failures + 1 })
+    })
+
+    // Hard-delete oldest messages without LLM (emergency memory reclaim)
+    const emergencyPrune = Effect.fn("SessionCompaction.emergencyPrune")(function* (input: { sessionID: SessionID }) {
+      const msgs = yield* session
+        .messages({ sessionID: input.sessionID })
+        .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+      if (!msgs || msgs.length < 4) {
+        log.info("emergency prune: too few messages to prune")
+        return
+      }
+
+      // Keep the last 2 user messages + their responses, delete everything before
+      let keepFrom = msgs.length - 1
+      let userMessagesSeen = 0
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].info.role === "user") {
+          userMessagesSeen++
+          if (userMessagesSeen >= 2) {
+            keepFrom = i
+            break
+          }
+        }
+        keepFrom = i
+      }
+
+      const toDelete = msgs.slice(0, keepFrom)
+      log.info("emergency prune: deleting " + toDelete.length + " oldest messages (kept " + (msgs.length - keepFrom) + " recent)")
+
+      for (const msg of toDelete) {
+        yield* session.removeMessage({ sessionID: input.sessionID, messageID: msg.info.id })
+      }
     })
 
     return Service.of({
@@ -487,6 +603,9 @@ When constructing the summary, try to stick to this template:
       process: processCompaction,
       create,
       background,
+      emergencyPrune,
+      syncFallback,
+      recordCompactionFailure,
     })
   }),
 )

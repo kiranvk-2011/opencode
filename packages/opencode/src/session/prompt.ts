@@ -3,7 +3,7 @@ import os from "os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
-import { Log } from "../util"
+import { Log, Token } from "../util"
 import { SessionRevert } from "./revert"
 import * as Session from "./session"
 import { Agent } from "../agent/agent"
@@ -11,7 +11,7 @@ import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
-import { SessionCompaction } from "./compaction"
+import { SessionCompaction, HARD_CAP_RATIO } from "./compaction"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider"
 import { SystemPrompt } from "./system"
@@ -1277,6 +1277,32 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       function* (input: PromptInput) {
         const session = yield* sessions.get(input.sessionID)
         yield* revert.cleanup(session)
+
+        // HARD CAP: Reject new messages if context is at 95%+ of window
+        // Only check on sessions with existing messages
+        const msgs = yield* MessageV2.filterCompactedEffect(input.sessionID)
+        const lastAssistant = msgs.findLast((m) => m.info.role === "assistant")
+        if (msgs.length > 2 && lastAssistant) {
+          const model = yield* provider.getModel(lastAssistant.info.model.providerID, lastAssistant.info.model.modelID)
+          const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
+          const estimatedTokens = Token.estimate(JSON.stringify(modelMessages))
+          const contextWindow = model.contextWindow ?? 144000
+          const ratio = estimatedTokens / contextWindow
+
+          if (ratio >= HARD_CAP_RATIO) {
+            // Try emergency prune first before rejecting
+            yield* compaction.emergencyPrune({ sessionID: input.sessionID })
+            // Re-check after prune
+            const msgs2 = yield* MessageV2.filterCompactedEffect(input.sessionID)
+            const modelMessages2 = yield* MessageV2.toModelMessagesEffect(msgs2, model, { stripMedia: true })
+            const estimatedTokens2 = Token.estimate(JSON.stringify(modelMessages2))
+            const ratio2 = estimatedTokens2 / contextWindow
+            if (ratio2 >= HARD_CAP_RATIO) {
+              throw new Error("Context window at hard cap (95%). Emergency prune failed to free enough space. Please start a new session or run /compact manually.")
+            }
+          }
+        }
+
         const message = yield* createUserMessage(input)
         yield* sessions.touch(input.sessionID)
 
