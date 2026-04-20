@@ -87,6 +87,13 @@ export interface Interface {
     auto: boolean
     overflow?: boolean
   }) => Effect.Effect<void>
+  readonly background: (input: {
+    sessionID: SessionID
+    agent: string
+    model: { providerID: ProviderID; modelID: ModelID }
+    currentTokens: number
+    contextWindow: number
+  }) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
@@ -568,6 +575,7 @@ export const layer: Layer.Layer<
       prune,
       process: processCompaction,
       create,
+      background,
     })
   }),
 )
