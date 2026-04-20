@@ -573,21 +573,29 @@ export const layer: Layer.Layer<
       }
 
       const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
-      const lastRun = cooldownMap.get(input.sessionID) ?? 0
-      if (Date.now() - lastRun < cooldownMs) {
-        log.info("background compaction skipped: cooldown active", {
-          elapsed: Date.now() - lastRun,
-          cooldownMs,
-        })
+
+      // Atomic check-and-set via Effect.sync — no yield point between get and set,
+      // so no other fiber can interleave and bypass the cooldown
+      const acquired = yield* Effect.sync(() => {
+        const lastRun = cooldownMap.get(input.sessionID) ?? 0
+        if (Date.now() - lastRun < cooldownMs) return false
+        cooldownMap.set(input.sessionID, Date.now())
+        return true
+      })
+
+      if (!acquired) {
+        log.info("background compaction skipped: cooldown active")
         return false
       }
 
-      // Atomic check-and-set: write to Map first (prevents race within same runtime),
-      // then persist to disk (survives restarts)
-      cooldownMap.set(input.sessionID, Date.now())
-      const diskData = loadCooldowns()
-      diskData[input.sessionID] = Date.now()
-      saveCooldowns(diskData)
+      // Persist to disk for survival across restarts (non-critical if it fails)
+      try {
+        const diskData = loadCooldowns()
+        diskData[input.sessionID] = Date.now()
+        saveCooldowns(diskData)
+      } catch {
+        // non-critical
+      }
 
       log.info("background compaction triggered", {
         sessionID: input.sessionID,
