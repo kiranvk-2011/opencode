@@ -523,7 +523,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "reasoning-end",
                   id: "reasoning-0",
-                  providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                  // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
                 })
                 isActiveReasoning = false
               }
@@ -629,7 +629,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                     toolCallId: toolCall.id ?? generateId(),
                     toolName: toolCall.function.name,
                     input: toolCall.function.arguments,
-                    providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                    // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
                   })
                   toolCall.hasFinished = true
                 }
@@ -642,8 +642,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               controller.enqueue({
                 type: "reasoning-end",
                 id: "reasoning-0",
-                // Include reasoning_opaque for Copilot multi-turn reasoning
-                providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
               })
             }
 
@@ -668,8 +667,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
             const providerMetadata: SharedV3ProviderMetadata = {
               [providerOptionsName]: {},
-              // Include reasoning_opaque for Copilot multi-turn reasoning
-              ...(reasoningOpaque ? { copilot: { reasoningOpaque } } : {}),
+              // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
               ...metadataExtractor?.buildMetadata(),
             }
             if (usage.completionTokensDetails.acceptedPredictionTokens != null) {
