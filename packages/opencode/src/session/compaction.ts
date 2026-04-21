@@ -597,6 +597,7 @@ export const layer: Layer.Layer<
     // Per-session cooldown tracking for background compaction
     const cooldowns = new Map<string, number>()
     const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
+    const EMERGENCY_THRESHOLD = 0.95 // 95% - forces compaction regardless of cooldown
 
     function parseCooldownMs(raw: string | undefined): number {
       if (!raw) return DEFAULT_COOLDOWN_MS
