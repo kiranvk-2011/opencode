@@ -117,8 +117,10 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
           role: "assistant",
           content: text || null,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-          reasoning_text: reasoningOpaque ? reasoningText : undefined,
-          reasoning_opaque: reasoningOpaque,
+          // reasoning_text included for display but reasoning_opaque omitted to avoid signature validation errors
+          // GitHub Copilot API rejects reasoning_opaque with \"Invalid signature in thinking block\" when echoed back
+          reasoning_text: reasoningText,
+          // reasoning_opaque: reasoningOpaque, // DISABLED: causes API signature validation errors
           ...metadata,
         })
 

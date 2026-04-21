@@ -220,9 +220,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       content.push({
         type: "text",
         text,
-        providerMetadata: choice.message.reasoning_opaque
-          ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
-          : undefined,
+        // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
       })
     }
 
@@ -232,10 +230,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       content.push({
         type: "reasoning",
         text: reasoning,
-        // Include reasoning_opaque for Copilot multi-turn reasoning
-        providerMetadata: choice.message.reasoning_opaque
-          ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
-          : undefined,
+        // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
       })
     }
 
@@ -247,9 +242,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
           toolCallId: toolCall.id ?? generateId(),
           toolName: toolCall.function.name,
           input: toolCall.function.arguments!,
-          providerMetadata: choice.message.reasoning_opaque
-            ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
-            : undefined,
+          // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
         })
       }
     }
@@ -502,7 +495,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "reasoning-end",
                   id: "reasoning-0",
-                  providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                  // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
                 })
                 isActiveReasoning = false
               }
@@ -511,7 +504,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "text-start",
                   id: "txt-0",
-                  providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                  // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
                 })
                 isActiveText = true
               }
@@ -593,7 +586,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                         toolCallId: toolCall.id ?? generateId(),
                         toolName: toolCall.function.name,
                         input: toolCall.function.arguments,
-                        providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                        // reasoningOpaque omitted to avoid GitHub Copilot API signature validation errors
                       })
                       toolCall.hasFinished = true
                     }
