@@ -7,7 +7,9 @@ import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types"
 import { convertToBase64 } from "@ai-sdk/provider-utils"
 
 function getOpenAIMetadata(message: { providerOptions?: SharedV3ProviderOptions }) {
-  return message?.providerOptions?.copilot ?? {}
+  // Return empty object to avoid sending copilot providerOptions (like reasoningOpaque) back to API
+  // GitHub Copilot API rejects reasoningOpaque with "Invalid signature in thinking block" when echoed back
+  return {}
 }
 
 export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Prompt): OpenAICompatibleChatPrompt {
