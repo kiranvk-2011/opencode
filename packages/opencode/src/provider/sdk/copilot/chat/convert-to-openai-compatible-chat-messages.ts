@@ -7,8 +7,8 @@ import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types"
 import { convertToBase64 } from "@ai-sdk/provider-utils"
 
 function getOpenAIMetadata(message: { providerOptions?: SharedV3ProviderOptions }) {
-  // Return empty object to avoid sending copilot providerOptions (like reasoningOpaque) back to API
-  // GitHub Copilot API rejects reasoningOpaque with "Invalid signature in thinking block" when echoed back
+  // Return empty object to avoid sending copilot providerOptions back to API
+  // GitHub Copilot API rejects reasoning fields with "Invalid signature in thinking block" when echoed back
   return {}
 }
 
@@ -74,8 +74,6 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
 
       case "assistant": {
         let text = ""
-        let reasoningText: string | undefined
-        let reasoningOpaque: string | undefined
         const toolCalls: Array<{
           id: string
           type: "function"
@@ -83,21 +81,13 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
         }> = []
 
         for (const part of content) {
-          const partMetadata = getOpenAIMetadata(part)
-          // Check for reasoningOpaque on any part (may be attached to text/tool-call)
-          const partOpaque = (part.providerOptions as { copilot?: { reasoningOpaque?: string } })?.copilot
-            ?.reasoningOpaque
-          if (partOpaque && !reasoningOpaque) {
-            reasoningOpaque = partOpaque
-          }
-
           switch (part.type) {
             case "text": {
               text += part.text
               break
             }
             case "reasoning": {
-              if (part.text) reasoningText = part.text
+              // Skip reasoning parts - do not send back to Copilot API to avoid signature validation errors
               break
             }
             case "tool-call": {
@@ -108,7 +98,6 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
                   name: part.toolName,
                   arguments: JSON.stringify(part.input),
                 },
-                ...partMetadata,
               })
               break
             }
@@ -119,11 +108,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
           role: "assistant",
           content: text || null,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-          // reasoning_text included for display but reasoning_opaque omitted to avoid signature validation errors
-          // GitHub Copilot API rejects reasoning_opaque with \"Invalid signature in thinking block\" when echoed back
-          reasoning_text: reasoningText,
-          // reasoning_opaque: reasoningOpaque, // DISABLED: causes API signature validation errors
-          ...metadata,
+          // reasoning_text and reasoning_opaque omitted to avoid GitHub Copilot API signature validation errors
         })
 
         break
