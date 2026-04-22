@@ -455,8 +455,14 @@ When constructing the summary, try to stick to this template:
 
       const cooldownMs = parseCooldownMs(cfg.compaction?.cooldown)
       const lastRun = cooldowns.get(input.sessionID) ?? 0
-      if (Date.now() - lastRun < cooldownMs) {
-        log.info("background compaction skipped: cooldown active")
+      const inCooldown = Date.now() - lastRun < cooldownMs
+
+      // Emergency bypass: skip cooldown if above 95% threshold
+      if (inCooldown && ratio < EMERGENCY_THRESHOLD) {
+        log.info("background compaction skipped: cooldown active", {
+          ratio: Math.round(ratio * 100) + "%",
+          emergencyThreshold: Math.round(EMERGENCY_THRESHOLD * 100) + "%",
+        })
         return false
       }
 
