@@ -13,20 +13,27 @@ export function usable(input: { cfg: Config.Info; model: Provider.Model }) {
 
   const reserved =
     input.cfg.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
-  const usable = input.model.limit.input
-    ? input.model.limit.input - reserved
-    : context - ProviderTransform.maxOutputTokens(input.model)
+  return input.model.limit.input
+    ? Math.max(0, input.model.limit.input - reserved)
+    : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model))
+}
 
-  const wouldOverflow = count >= usable
+export function isOverflow(input: { cfg: Config.Info; tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+  if (input.cfg.compaction?.auto === false) return false
+  if (input.model.limit.context === 0) return false
+
+  const count =
+    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+  const usableLimit = usable(input)
+  const wouldOverflow = count >= usableLimit
   log.info("overflow check", {
     count,
-    usable,
-    reserved,
+    usable: usableLimit,
     limitInput: input.model.limit.input,
     limitContext: input.model.limit.context,
     maxOutput: ProviderTransform.maxOutputTokens(input.model),
     wouldOverflow,
-    ratio: Math.round((count / usable) * 100) + "%",
+    ratio: usableLimit > 0 ? Math.round((count / usableLimit) * 100) + "%" : "n/a",
   })
   return wouldOverflow
 }
