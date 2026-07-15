@@ -5,6 +5,7 @@ on:
     branches:
       - fix/copilot-business-endpoint-routing
       - fix/background-compaction
+      - fix/upstream-rebase-20260715
   workflow_dispatch:
 
 jobs:
